@@ -17,8 +17,8 @@ warnings.filterwarnings("ignore")
 ######### SET PARAMETERS TILL LINE 100 ##########
 #################################################
 
-# number of mcmc steps. 1000 for official runs, 100 for test runs.
-nsam=100
+# number of mcmc steps. 1000 for official runs, 100 for test runs to save time.
+nsam=1000
 
 # snr threshold, any spectra with snr below snr_min will be skipped for RV or EW fit.
 snr_min = 2
@@ -42,7 +42,7 @@ savedata = 1
 showcombinedspectra = 1
 
 #show plots for how normalization is done
-show_normalization = 0
+show_normalization = 1
 
 #show the spectra with the best fit RV templates around CaT lines
 showrvplot = 1
@@ -418,16 +418,14 @@ def read_tell_stds(filename):
     #return new_rvwl, new_rvspec
 
 def get_rv(wl, spec, dspec, rvwl, rvspec, object, rvstar):
-    '''
+    
     fitstart = (np.abs(wl-8400)).argmin()
     fitend = (np.abs(wl-9000)).argmin()
     spec = spec[fitstart:fitend]
     dspec = dspec[fitstart:fitend]
     wl = wl[fitstart:fitend]
-    print(wl.min(), wl.max())
-    '''
+    
     spec,dspec = normalize_spec(wl, spec, dspec)
-
 
     ndim=1
     nwalkers=20
@@ -576,7 +574,6 @@ def get_telluric_corr(wl, spec, dspec, rvwl, rvspec, object, rv):
     snr = np.median(spec[wlmask]/dspec[wlmask])
     print('SNR = '+str(snr))
     
-    spec, dspec = normalize_spec(wl, spec, dspec)
 
     #MCMC
     #sampler = emcee.EnsembleSampler(nwalkers, ndim, lp_post, args=(rvmin, rvmax, wlmask, rvwl, rvspec, spec, dspec), a=0.01)
