@@ -13,18 +13,26 @@ import time
 import warnings
 warnings.filterwarnings("ignore")
 
+#################################################
+######### SET PARAMETERS TILL LINE 100 ##########
+#################################################
+
 # number of mcmc steps. 1000 for official runs, 100 for test runs.
 nsam=100
 
-# normalize the spectra before combining the spectra (use 1 for default), was 0 in the past
+# snr threshold, any spectra with snr below snr_min will be skipped for RV or EW fit.
+snr_min = 2
+
+# normalize the spectra before combining the spectra (default: 1),  0 was used in the past (i.e. normalization done after combine)
 normalizeb4combine = 1
 
 # resample spec or not, default: uniform_resample = 0
-uniform_resample = 0 #used uniform_resample = 1 in the past
+# in the past, uniform_resample = 1 was used
+uniform_resample = 0
 
 # resample step, if uniform_resample = 0, then this number is not used in the program since no resampling will be done.
-# used 0.1 A in the past, should use 0.19 A in the future since that is the actual grid.
-# if using step other than 0.19, then the error spectra will be wrong.
+# used 0.1 A in the past, should use 0.19 A in the future since that is the actual grid if uniform_resample = 1.
+# if using step other than 0.19, then the error spectra will be wrong. TODO, rescale the error spectra for a different step size.
 resample_step = 0.19
 
 #save output catalog or not
@@ -33,15 +41,18 @@ savedata = 1
 #show the combine spectra that is used for the fit
 showcombinedspectra = 1
 
+#show plots for how normalization is done
+show_normalization = 0
+
 #show the spectra with the best fit RV templates around CaT lines
 showrvplot = 1
 #save the plot above
-savervplot = 0
+savervplot = 1
 
 #show the spectra with the best fit CaT EW
 showewplot = 1
 #save the plot above
-saveewplot = 0
+saveewplot = 1
 
 #display the parameters from the EW fit in the terminal (but not saved)
 dispara = 0
@@ -74,20 +85,21 @@ telluric_fname = '/Users/tingli/Dropbox/dwarfgalaxy/Magellan/stds/imacs-aband-06
 # nbuff cannot be zero due to how the code is written, 1 is the minimal.
 nbuff = 5
 
-# snr threshold, any spectra with snr below snr_min will not fit in RV or EW
-snr_min = 3
-
-################
-################
+###########################
+######  SINGLE MODE #######
 #running with one specific spectrum or not, if single = 1, then the file with object_fname_single will run, not the objdir files
 #if single = 1 and bhb = 1, then only BHB template will be fit, not the other two templates
 #bhb=1 only work when single=1 (i.e. bhb=1 won't work during batch mode above)
-single = 0
+single = 1
 bhb = 0
 object_fname_single = \
-'/Users/tingli/Dropbox/dwarfgalaxy/Magellan/IMACS_JunJul2021/spec_1d/bliss_n2_spec1d/spec1d.bliss1xx.5380483068469015168.fits'
-################
-################
+'/Users/tingli/Dropbox/dwarfgalaxy/Magellan/IMACS_JunJul2021/spec_1d/delve1_jun18/spec1d.delve1r1.4359165344702227840.fits'
+##########################
+##########################
+
+##############################################
+######## END OF PARAMETER SETTING HERE #######
+##############################################
 
 # spectra display window (just for plotting)
 CaT1min=8480
@@ -114,7 +126,7 @@ c = 2.99792458e5
 if not os.path.exists(figdir):
     os.makedirs(figdir)
 
-
+    
 def normalize_spec(wl, spec, dspec):
     """
     normalize the spectra with a legendre polynomial
@@ -138,11 +150,11 @@ def normalize_spec(wl, spec, dspec):
     idx1 = (spec/cont > thlow) & (spec/cont < thhigh)
 
 
-    if wl.min() < 7530:
-        lowbound = 7530
-    else:
-        lowbound = 7580
-
+    #if wl.min() < 7530:
+    #    lowbound = 7530
+    #else:
+    #    lowbound = 7580
+    lowbound = 7580
 
     if snr > 7:
         for i in range(maxiter):
@@ -150,7 +162,7 @@ def normalize_spec(wl, spec, dspec):
             #plt.plot(wl[idx1], spec[idx1], lw = 2)
             z = legfit(wl[idx1], spec[idx1], 2, w = 1./dspec[idx1])
             cont = legval(wl,z)
-            idx2 = (spec/cont > thlow) & (spec/cont < thhigh)
+            idx2 = (spec/cont > thlow) & (spec/cont < thhigh) & ((wl < lowbound) | (wl > 7700))
             if all(idx1 == idx2):
                 break
             else:
@@ -159,6 +171,14 @@ def normalize_spec(wl, spec, dspec):
         z = legfit(wl[idx1], spec[idx1], 0, w = 1./dspec[idx1])
         cont = legval(wl,z)
 
+    if show_normalization:
+        plt.show()
+        plt.figure()
+        plt.plot(wl, spec)
+        plt.plot(wl[idx1], spec[idx1], lw = 2)
+        plt.plot(wl, cont)
+        plt.show()
+        
     spec = spec/cont
     dspec = dspec/cont
 
@@ -198,7 +218,7 @@ def normalize_spec(wl, spec, dspec):
 
 def lp_post(rv, rvmin, rvmax, mask, wl, model, obj, objerr):
     lp = -np.inf
-
+    
     if rv < rvmax and rv > rvmin:
         z = rv/c
         lp_prior=0.0
@@ -398,7 +418,16 @@ def read_tell_stds(filename):
     #return new_rvwl, new_rvspec
 
 def get_rv(wl, spec, dspec, rvwl, rvspec, object, rvstar):
-    spec, dspec = normalize_spec(wl, spec, dspec)
+    '''
+    fitstart = (np.abs(wl-8400)).argmin()
+    fitend = (np.abs(wl-9000)).argmin()
+    spec = spec[fitstart:fitend]
+    dspec = dspec[fitstart:fitend]
+    wl = wl[fitstart:fitend]
+    print(wl.min(), wl.max())
+    '''
+    spec,dspec = normalize_spec(wl, spec, dspec)
+
 
     ndim=1
     nwalkers=20
@@ -425,9 +454,10 @@ def get_rv(wl, spec, dspec, rvwl, rvspec, object, rvstar):
         wlmask = (wl > wlmaskmin_bhb)  & (wl < wlmaskmax_bhb)
     else:
         wlmask = (wl > wlmaskmin)  & (wl < wlmaskmax)
-
+    
     snr = np.nanmedian(spec[wlmask]/dspec[wlmask])
     print('SNR = '+str(snr))
+
 
     for kk in range(0, nstars, 1):
         # here we use the chi-square minimization to find the starting p0
@@ -524,7 +554,6 @@ def get_rv(wl, spec, dspec, rvwl, rvspec, object, rvstar):
 
 
 def get_telluric_corr(wl, spec, dspec, rvwl, rvspec, object, rv):
-    #spec, dspec = normalize_spec(wl, spec, dspec)
     ndim=1
     nwalkers=20
     rvmin = -10
@@ -546,6 +575,8 @@ def get_telluric_corr(wl, spec, dspec, rvwl, rvspec, object, rv):
     
     snr = np.median(spec[wlmask]/dspec[wlmask])
     print('SNR = '+str(snr))
+    
+    spec, dspec = normalize_spec(wl, spec, dspec)
 
     #MCMC
     #sampler = emcee.EnsembleSampler(nwalkers, ndim, lp_post, args=(rvmin, rvmax, wlmask, rvwl, rvspec, spec, dspec), a=0.01)
@@ -960,6 +991,9 @@ if __name__ == "__main__":
         else:
             wl, spec, dspec = combine_imacs_spec(object_fname, nbuff = nbuff)
         
+        if not normalizeb4combine:
+            spec, dspec = normalize_spec(wl, spec, dspec)
+        
         hdr = pyfits.open(object_fname)[5].header
         object = hdr['OBJNO']
         print('OBJECT ID = %s'%object)
@@ -993,6 +1027,9 @@ if __name__ == "__main__":
                     wl, spec, dspec = combine_imacs_spec_resample_uniform(object_fname, nbuff=nbuff)
                 else:
                     wl, spec, dspec = combine_imacs_spec(object_fname, nbuff = nbuff)
+
+                if not normalizeb4combine:
+                    spec, dspec = normalize_spec(wl, spec, dspec)
 
                 hdr = pyfits.open(object_fname)[5].header
                 object = hdr['OBJNO']
