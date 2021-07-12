@@ -39,18 +39,18 @@ resample_step = 0.19
 savedata = 1
 
 #show the combine spectra that is used for the fit
-showcombinedspectra = 1
+showcombinedspectra = 0
 
 #show plots for how normalization is done
-show_normalization = 1
+show_normalization = 0
 
 #show the spectra with the best fit RV templates around CaT lines
-showrvplot = 1
+showrvplot = 0
 #save the plot above
 savervplot = 1
 
 #show the spectra with the best fit CaT EW
-showewplot = 1
+showewplot = 0
 #save the plot above
 saveewplot = 1
 
@@ -68,13 +68,13 @@ writespec = 0
 outputdir = './'
 
 #directory for saved figures
-figdir = outputdir+'fig_delve1_feb2019/'
+figdir = outputdir+'fig_delve1_jun27/'
 
 #file name for the output catalog
-outputfile = outputdir+'delve1_jun18_v2.txt'
+outputfile = outputdir+'delve1_jun27.txt'
 
 #input directory for the 1D spectra. it should be a directory and the code will run on all spectra (filename ended with .fits) in this directory
-objdir = '../spec_1d/delve1_jun18/'
+objdir = '../spec_1d/delve1_jun27/'
 
 #path for the rv template and telluric template
 rv_fname = '/Users/tingli/Dropbox/dwarfgalaxy/Magellan/stds/imacs-030817.fits'
@@ -90,10 +90,10 @@ nbuff = 5
 #running with one specific spectrum or not, if single = 1, then the file with object_fname_single will run, not the objdir files
 #if single = 1 and bhb = 1, then only BHB template will be fit, not the other two templates
 #bhb=1 only work when single=1 (i.e. bhb=1 won't work during batch mode above)
-single = 1
+single = 0
 bhb = 0
 object_fname_single = \
-'/Users/tingli/Dropbox/dwarfgalaxy/Magellan/IMACS_JunJul2021/spec_1d/delve1_jun18/spec1d.delve1r1.4359165344702227840.fits'
+'/Users/tingli/Dropbox/dwarfgalaxy/Magellan/IMACS_JunJul2021/spec_1d/ps11r1_spec1d/spec1d.ps11r1xx.6759858716625011200.fits'
 ##########################
 ##########################
 
@@ -712,12 +712,19 @@ def get_ew(object, wl, spec, dspec, rv, gaussianonly = 0):
     peakfindend = (np.abs(wl-8546.09*(1+rv/c))).argmin()
 
     sn = np.median(spec[fitstart:fitend]/dspec[fitstart:fitend])
+    
+
     if sn < -7:
         guassianonly = 1
     else:
         gaussianonly = 0
 
-    contlevel = np.median(spec[contstart:contend][spec[contstart:contend]>0])
+    contlevel = np.nanmedian(spec[contstart:contend][spec[contstart:contend]>0])
+    if np.isnan(contlevel) :
+        contstart = (np.abs(wl-8590*(1+rv/c))).argmin()
+        contend = (np.abs(wl-8610*(1+rv/c))).argmin()
+        contlevel = np.nanmedian(spec[contstart:contend][spec[contstart:contend]>0])
+
     spec = spec / contlevel
     dspec = dspec / contlevel
 
