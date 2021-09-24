@@ -94,7 +94,7 @@ nbuff = 5
 #running with one specific spectrum or not, if single = 1, then the file with object_fname_single will run, not the objdir files
 #if single = 1 and bhb = 1, then only BHB template will be fit, not the other two templates
 #bhb=1 only work when single=1 (i.e. bhb=1 won't work during batch mode above)
-single = 0
+single = 1
 bhb = 0
 object_fname_single = \
 '/Users/tingli/Dropbox/dwarfgalaxy/Magellan/Car23_IMACS/1Dspec_new/car2r1_spec1d_n4only/spec1d.car2r1xx.2017239293.fits'
@@ -431,8 +431,13 @@ def read_tell_stds(filename):
 
 def get_rv(wl, spec, dspec, rvwl, rvspec, object, rvstar):
     
-    fitstart = (np.abs(wl-8400)).argmin()
-    fitend = (np.abs(wl-9000)).argmin()
+    if single and bhb:
+        fitstart = (np.abs(wl-8400)).argmin()
+        fitend = (np.abs(wl-9000)).argmin()
+    else:
+        fitstart = (np.abs(wl-8400)).argmin()
+        fitend = (np.abs(wl-8700)).argmin()
+
     spec = spec[fitstart:fitend]
     dspec = dspec[fitstart:fitend]
     wl = wl[fitstart:fitend]
@@ -574,6 +579,15 @@ def get_telluric_corr(wl, spec, dspec, rvwl, rvspec, object, rv):
     rvmax = 10
     p0=np.random.rand(ndim * nwalkers).reshape((nwalkers, ndim))
     p0= p0 * rvmax * 2 - rvmax
+    
+    wl0 = wl
+    spec0 = spec
+    dspec0 = dspec
+    rvspec0 = np.interp(wl0, rvwl, rvspec)
+    
+    spec = spec[(wl > 7530)  & (wl < 7720)]
+    dspec = dspec[(wl > 7530)  & (wl < 7720)]
+    wl = wl[(wl > 7530)  & (wl < 7720)]
 
     # MCMC needs some time to produce reasonable "d" from the likelihood, which is called the "burn-in" period.
     # Adjusting the "burn-in" period is quite empirical.
@@ -632,12 +646,12 @@ def get_telluric_corr(wl, spec, dspec, rvwl, rvspec, object, rv):
         axarr[1].plot(wl[wlmask]*(1+rv_mean/c), rvspec[wlmask], 'b')
         axarr[1].set_xlim(7550,7700)
         axarr[1].set_ylim(-0.5,1.5)
-        axarr[1].set_title(str(object)+'_telluric', fontsize=16)
+        axarr[1].set_title(str(object)+' telluric', fontsize=16)
         axarr[1].set_xlabel('Wavelength')
         axarr[1].xaxis.set_major_locator(plt.MultipleLocator(40))
 
-        axarr[2].plot(wl, spec, 'lime',lw=0.5)
-        axarr[2].plot(wl*(1+rv_mean/c), rvspec, 'b')
+        axarr[2].plot(wl0, spec0, 'lime',lw=0.5)
+        axarr[2].plot(wl0*(1+rv_mean/c), rvspec0, 'b')
         axarr[2].axvline(8183.25*(1+rv/c), ls='--', color='r')
         axarr[2].axvline(8194.79*(1+rv/c), ls='--', color='r')
         axarr[2].set_xlim(8160,8220)
@@ -645,8 +659,8 @@ def get_telluric_corr(wl, spec, dspec, rvwl, rvspec, object, rv):
         axarr[2].xaxis.set_major_locator(plt.MultipleLocator(30))
         axarr[2].set_title('Na I at 8200A')
         
-        axarr[3].plot(wl, spec, 'lime',lw=0.5)
-        axarr[3].plot(wl*(1+rv_mean/c), rvspec, 'b')
+        axarr[3].plot(wl0, spec0, 'lime',lw=0.5)
+        axarr[3].plot(wl0*(1+rv_mean/c), rvspec0, 'b')
         axarr[3].axvline(8806.8*(1+rv/c), ls='--', color='r')
         axarr[3].set_xlim(8790*(1+rv/c),8820*(1+rv/c))
         axarr[3].set_ylim(-0.5,1.5)
@@ -661,7 +675,6 @@ def get_telluric_corr(wl, spec, dspec, rvwl, rvspec, object, rv):
             plt.show()
 
     return rv_mean, rv_std, chi2rv, snr
-
 
 
 def Flin(x,p):
