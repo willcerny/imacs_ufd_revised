@@ -9,6 +9,7 @@ import os
 from scipy import ndimage
 from numpy.polynomial.legendre import legfit, legval
 import time
+from scipy.interpolate import CubicSpline
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -35,8 +36,11 @@ uniform_resample = 0
 # if using step other than 0.19, then the error spectra will be wrong. TODO, rescale the error spectra for a different step size.
 resample_step = 0.19
 
+# if doing cubicspline interpolation, then cubic = 1. If linear then cubic = 0
+cubic = 1
+
 #save output catalog or not
-savedata = 1
+savedata = 0
 
 #show the combine spectra that is used for the fit
 showcombinedspectra = 0
@@ -47,12 +51,12 @@ show_normalization = 0
 #show the spectra with the best fit RV templates around CaT lines
 showrvplot = 0
 #save the plot above
-savervplot = 1
+savervplot = 0
 
 #show the spectra with the best fit CaT EW
 showewplot = 0
 #save the plot above
-saveewplot = 1
+saveewplot = 0
 
 #display the parameters from the EW fit in the terminal (but not saved)
 dispara = 0
@@ -68,13 +72,13 @@ writespec = 0
 outputdir = './'
 
 #directory for saved figures
-figdir = outputdir+'fig_delve1_jun27/'
+figdir = outputdir+'fig_cen1_r2_jul11_jul13/'
 
 #file name for the output catalog
-outputfile = outputdir+'delve1_jun27.txt'
+outputfile = outputdir+'cen1_r2_jul11_jul13.txt'
 
 #input directory for the 1D spectra. it should be a directory and the code will run on all spectra (filename ended with .fits) in this directory
-objdir = '../spec_1d/delve1_jun27/'
+objdir = '../spec_1d/cen1_r2_jul11_jul13_spec1d/'
 
 #path for the rv template and telluric template
 rv_fname = '/Users/tingli/Dropbox/dwarfgalaxy/Magellan/stds/imacs-030817.fits'
@@ -93,7 +97,7 @@ nbuff = 5
 single = 0
 bhb = 0
 object_fname_single = \
-'/Users/tingli/Dropbox/dwarfgalaxy/Magellan/IMACS_JunJul2021/spec_1d/ps11r1_spec1d/spec1d.ps11r1xx.6759858716625011200.fits'
+'/Users/tingli/Dropbox/dwarfgalaxy/Magellan/Car23_IMACS/1Dspec_new/car2r1_spec1d_n4only/spec1d.car2r1xx.2017239293.fits'
 ##########################
 ##########################
 
@@ -224,7 +228,11 @@ def lp_post(rv, rvmin, rvmax, mask, wl, model, obj, objerr):
         lp_prior=0.0
 
         new_wl = wl*(1+z)
-        model = np.interp(wl,new_wl,model)
+        if cubic:
+            p = CubicSpline(new_wl,model)
+            model = p(wl)
+        else:
+            model = np.interp(wl,new_wl,model)
         model = model[mask]
         obj = obj[mask]
         objerr = objerr[mask]
@@ -241,7 +249,11 @@ def chi2cal(theta, mask, wl, model, obj, objerr):
     z = rv/c
 
     new_wl = wl*(1+z)
-    model = np.interp(wl,new_wl,model)
+    if cubic:
+        p = CubicSpline(new_wl,model)
+        model = p(wl)
+    else:
+        model = np.interp(wl,new_wl,model)
     model = model[mask]
     obj = obj[mask]
     objerr = objerr[mask]
@@ -443,7 +455,11 @@ def get_rv(wl, spec, dspec, rvwl, rvspec, object, rvstar):
     nburn=50
     
     for kk in range(0, nstars, 1):
-        tempspec = np.interp(wl, rvwl[kk], rvspec[kk])
+        if cubic:
+            p = CubicSpline(rvwl[kk], rvspec[kk])
+            tempspec = p(wl)
+        else:
+            tempspec = np.interp(wl, rvwl[kk], rvspec[kk])
         rvspec_temp[kk] = tempspec
 
     rvspec = rvspec_temp
@@ -563,8 +579,11 @@ def get_telluric_corr(wl, spec, dspec, rvwl, rvspec, object, rv):
     # Adjusting the "burn-in" period is quite empirical.
     nburn=50
 
-    rvspec = np.interp(wl, rvwl, rvspec)
-
+    if cubic:
+        p = CubicSpline(rvwl, rvspec)
+        rvspec = p(wl)
+    else:
+        rvspec = np.interp(wl, rvwl, rvspec)
     #spec = np.interp(rvwl, wl, spec)
     #dspec = np.interp(rvwl, wl, dspec)
 
@@ -574,7 +593,6 @@ def get_telluric_corr(wl, spec, dspec, rvwl, rvspec, object, rv):
     snr = np.median(spec[wlmask]/dspec[wlmask])
     print('SNR = '+str(snr))
     
-
     #MCMC
     #sampler = emcee.EnsembleSampler(nwalkers, ndim, lp_post, args=(rvmin, rvmax, wlmask, rvwl, rvspec, spec, dspec), a=0.01)
     sampler = emcee.EnsembleSampler(nwalkers, ndim, lp_post, args=(rvmin, rvmax, wlmask, wl, rvspec, spec, dspec), a=0.01)
@@ -586,10 +604,10 @@ def get_telluric_corr(wl, spec, dspec, rvwl, rvspec, object, rv):
 
     rvdist = sampler.flatchain[:,0]
     temp = rvdist
-    temp_mean = np.median(temp)
+    temp_mean = np.nanmedian(temp)
     if np.std(temp) > 10 : temp = temp[(temp < temp_mean + 70) & (temp > temp_mean -70)]
     temp = stats.sigmaclip(temp,low=5, high=5)[0]
-    rv_mean = np.median(temp)
+    rv_mean = np.nanmedian(temp)
     #rv_std = np.std(temp)
     rv_std = 0.5 * (np.percentile(temp, 84) - np.percentile(temp, 16))
 
