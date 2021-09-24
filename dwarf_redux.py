@@ -10,6 +10,7 @@ from scipy import ndimage
 from numpy.polynomial.legendre import legfit, legval
 import time
 from scipy.interpolate import CubicSpline
+from schwimmbad import MultiPool
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -20,6 +21,7 @@ warnings.filterwarnings("ignore")
 
 # number of mcmc steps. 1000 for official runs, 100 for test runs to save time.
 nsam=1000
+nproc=4
 
 # snr threshold, any spectra with snr below snr_min will be skipped for RV or EW fit.
 snr_min = 2
@@ -486,10 +488,11 @@ def get_rv(wl, spec, dspec, rvwl, rvspec, object, rvstar):
         #p0= p0 * rvmax * 2 - rvmax
         p0 = p0 + rvarr[max(likearr) == likearr][0]
 
-        sampler = emcee.EnsembleSampler(nwalkers, ndim, lp_post, args=(rvmin, rvmax, wlmask, wl, rvspec[kk], spec, dspec))
-        pos, prob, state = sampler.run_mcmc(p0, nburn)
-        sampler.reset()
-        sampler.run_mcmc(pos, nsam)
+        with MultiPool(nproc) as pool:
+            sampler = emcee.EnsembleSampler(nwalkers, ndim, lp_post, args=(rvmin, rvmax, wlmask, wl, rvspec[kk], spec, dspec), pool=pool)
+            pos, prob, state = sampler.run_mcmc(p0, nburn)
+            sampler.reset()
+            sampler.run_mcmc(pos, nsam)
 
         rvdist[kk, :] = sampler.flatchain[:, 0]
         rv_mean = np.nanmedian(rvdist[kk, :])
@@ -608,14 +611,12 @@ def get_telluric_corr(wl, spec, dspec, rvwl, rvspec, object, rv):
     print('SNR = '+str(snr))
     
     #MCMC
-    #sampler = emcee.EnsembleSampler(nwalkers, ndim, lp_post, args=(rvmin, rvmax, wlmask, rvwl, rvspec, spec, dspec), a=0.01)
-    sampler = emcee.EnsembleSampler(nwalkers, ndim, lp_post, args=(rvmin, rvmax, wlmask, wl, rvspec, spec, dspec), a=0.01)
-
-    pos, prob, state = sampler.run_mcmc(p0, nburn)
-    sampler.reset()
-
-    sampler.run_mcmc(pos, nsam)
-
+    with MultiPool(nproc) as pool:
+        sampler = emcee.EnsembleSampler(nwalkers, ndim, lp_post, args=(rvmin, rvmax, wlmask, wl, rvspec, spec, dspec), pool=pool)
+        pos, prob, state = sampler.run_mcmc(p0, nburn)
+        sampler.reset()
+        sampler.run_mcmc(pos, nsam)
+    
     rvdist = sampler.flatchain[:,0]
     temp = rvdist
     temp_mean = np.nanmedian(temp)
