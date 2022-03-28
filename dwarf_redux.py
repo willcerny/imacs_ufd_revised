@@ -21,7 +21,6 @@ warnings.filterwarnings("ignore")
 
 # number of mcmc steps. 1000 for official runs, 100 for test runs to save time.
 nsam=1000
-nproc=4
 
 # snr threshold, any spectra with snr below snr_min will be skipped for RV or EW fit.
 snr_min = 2
@@ -42,7 +41,7 @@ resample_step = 0.19
 cubic = 1
 
 #save output catalog or not
-savedata = 0
+savedata = 1
 
 #show the combine spectra that is used for the fit
 showcombinedspectra = 0
@@ -53,12 +52,12 @@ show_normalization = 0
 #show the spectra with the best fit RV templates around CaT lines
 showrvplot = 0
 #save the plot above
-savervplot = 0
+savervplot = 1
 
 #show the spectra with the best fit CaT EW
 showewplot = 0
 #save the plot above
-saveewplot = 0
+saveewplot = 1
 
 #display the parameters from the EW fit in the terminal (but not saved)
 dispara = 0
@@ -74,13 +73,13 @@ writespec = 0
 outputdir = './'
 
 #directory for saved figures
-figdir = outputdir+'fig_cen1_r2_jul11_jul13/'
+figdir = outputdir+'fig_delve2r1_oct9_2021_spec1d/'
 
 #file name for the output catalog
-outputfile = outputdir+'cen1_r2_jul11_jul13.txt'
+outputfile = outputdir+'delve2r1_oct9_2021_spec1d.txt'
 
 #input directory for the 1D spectra. it should be a directory and the code will run on all spectra (filename ended with .fits) in this directory
-objdir = '../spec_1d/cen1_r2_jul11_jul13_spec1d/'
+objdir = '../spec_1d/delve2r1_oct9_2021_spec1d/'
 
 #path for the rv template and telluric template
 rv_fname = '/Users/tingli/Dropbox/dwarfgalaxy/Magellan/stds/imacs-030817.fits'
@@ -96,10 +95,12 @@ nbuff = 5
 #running with one specific spectrum or not, if single = 1, then the file with object_fname_single will run, not the objdir files
 #if single = 1 and bhb = 1, then only BHB template will be fit, not the other two templates
 #bhb=1 only work when single=1 (i.e. bhb=1 won't work during batch mode above)
-single = 1
+single = 0
 bhb = 0
 object_fname_single = \
 '/Users/tingli/Dropbox/dwarfgalaxy/Magellan/Car23_IMACS/1Dspec_new/car2r1_spec1d_n4only/spec1d.car2r1xx.2017239293.fits'
+# fit the EW with gaussian + Lorentzian for 0, and only fit with gaussian for 1. (EW' = EW*1.1 if gaussian only)
+gaussianonly = 0
 ##########################
 ##########################
 
@@ -488,7 +489,7 @@ def get_rv(wl, spec, dspec, rvwl, rvspec, object, rvstar):
         #p0= p0 * rvmax * 2 - rvmax
         p0 = p0 + rvarr[max(likearr) == likearr][0]
 
-        with MultiPool(nproc) as pool:
+        with MultiPool() as pool:
             sampler = emcee.EnsembleSampler(nwalkers, ndim, lp_post, args=(rvmin, rvmax, wlmask, wl, rvspec[kk], spec, dspec), pool=pool)
             pos, prob, state = sampler.run_mcmc(p0, nburn)
             sampler.reset()
@@ -527,7 +528,7 @@ def get_rv(wl, spec, dspec, rvwl, rvspec, object, rvstar):
         #axarr[0].axvline(np.percentile(temp, 84), ls='--', color='r')
         axarr[0].axvline(np.percentile(temp, 50), ls='--', color='r')
 
-        axarr[1].plot(wl[wlmask], spec[wlmask], 'lime',lw=0.5)
+        axarr[1].plot(wl[wlmask], spec[wlmask], 'm',lw=0.5)
         axarr[1].plot(wl[wlmask]*(1+rv_mean/c), rvspec[jj][wlmask], 'b')
         axarr[1].set_xlim(wlmaskmin_bhb,wlmaskmax_bhb)
         axarr[1].set_ylim(-0.5,1.5)
@@ -544,14 +545,14 @@ def get_rv(wl, spec, dspec, rvwl, rvspec, object, rvstar):
         #axarr[0].axvline(np.percentile(temp, 84), ls='--', color='r')
         axarr[0].axvline(np.percentile(temp, 50), ls='--', color='r')
 
-        axarr[1].plot(wl[wlmask], spec[wlmask], 'lime',lw=0.5)
+        axarr[1].plot(wl[wlmask], spec[wlmask], 'm',lw=0.5)
         axarr[1].plot(wl[wlmask]*(1+rv_mean/c), rvspec[jj][wlmask], 'b')
         axarr[1].set_xlim(CaT1min*(1+rv_mean/c),CaT1max*(1+rv_mean/c))
         axarr[1].set_ylim(-0.5,1.5)
         axarr[1].xaxis.set_major_locator(plt.MultipleLocator(10))
         axarr[1].axvline(8498.03*(1+rv_mean/c), ls='--', color='r')
 
-        axarr[2].plot(wl[wlmask], spec[wlmask], 'lime',lw=0.5)
+        axarr[2].plot(wl[wlmask], spec[wlmask], 'm',lw=0.5)
         axarr[2].plot(wl[wlmask]*(1+rv_mean/c), rvspec[jj][wlmask], 'b')
         axarr[2].set_xlim(CaT2min*(1+rv_mean/c),CaT2max*(1+rv_mean/c))
         axarr[2].set_ylim(-0.5,1.5)
@@ -560,12 +561,13 @@ def get_rv(wl, spec, dspec, rvwl, rvspec, object, rvstar):
         axarr[2].set_title(object+'+'+rvstar[jj])
         axarr[2].set_xlabel('Wavelength')
 
-        axarr[3].plot(wl[wlmask], spec[wlmask], 'lime',lw=0.5)
+        axarr[3].plot(wl[wlmask], spec[wlmask], 'm',lw=0.5)
         axarr[3].plot(wl[wlmask]*(1+rv_mean/c), rvspec[jj][wlmask], 'b')
         axarr[3].set_xlim(CaT3min*(1+rv_mean/c),CaT3max*(1+rv_mean/c))
         axarr[3].set_ylim(-0.5,1.5)
         axarr[3].axvline(8662.14*(1+rv_mean/c), ls='--', color='r')
         axarr[3].xaxis.set_major_locator(plt.MultipleLocator(10))
+        axarr[3].set_title('snr ='+str(snr))
 
     if savervplot:
         plt.savefig(figdir+str(object)+'_rv.png')
@@ -611,7 +613,7 @@ def get_telluric_corr(wl, spec, dspec, rvwl, rvspec, object, rv):
     print('SNR = '+str(snr))
     
     #MCMC
-    with MultiPool(nproc) as pool:
+    with MultiPool() as pool:
         sampler = emcee.EnsembleSampler(nwalkers, ndim, lp_post, args=(rvmin, rvmax, wlmask, wl, rvspec, spec, dspec), pool=pool)
         pos, prob, state = sampler.run_mcmc(p0, nburn)
         sampler.reset()
@@ -643,7 +645,7 @@ def get_telluric_corr(wl, spec, dspec, rvwl, rvspec, object, rv):
         #axarr[0].axvline(np.percentile(temp, 84), ls='--', color='r')
         axarr[0].axvline(np.percentile(temp, 50), ls='--', color='b')
 
-        axarr[1].plot(wl[wlmask], spec[wlmask], 'lime',lw=0.5)
+        axarr[1].plot(wl[wlmask], spec[wlmask], 'm',lw=0.5)
         axarr[1].plot(wl[wlmask]*(1+rv_mean/c), rvspec[wlmask], 'b')
         axarr[1].set_xlim(7550,7700)
         axarr[1].set_ylim(-0.5,1.5)
@@ -651,7 +653,7 @@ def get_telluric_corr(wl, spec, dspec, rvwl, rvspec, object, rv):
         axarr[1].set_xlabel('Wavelength')
         axarr[1].xaxis.set_major_locator(plt.MultipleLocator(40))
 
-        axarr[2].plot(wl0, spec0, 'lime',lw=0.5)
+        axarr[2].plot(wl0, spec0, 'm',lw=0.5)
         axarr[2].plot(wl0*(1+rv_mean/c), rvspec0, 'b')
         axarr[2].axvline(8183.25*(1+rv/c), ls='--', color='r')
         axarr[2].axvline(8194.79*(1+rv/c), ls='--', color='r')
@@ -660,7 +662,7 @@ def get_telluric_corr(wl, spec, dspec, rvwl, rvspec, object, rv):
         axarr[2].xaxis.set_major_locator(plt.MultipleLocator(30))
         axarr[2].set_title('Na I at 8200A')
         
-        axarr[3].plot(wl0, spec0, 'lime',lw=0.5)
+        axarr[3].plot(wl0, spec0, 'm',lw=0.5)
         axarr[3].plot(wl0*(1+rv_mean/c), rvspec0, 'b')
         axarr[3].axvline(8806.8*(1+rv/c), ls='--', color='r')
         axarr[3].set_xlim(8790*(1+rv/c),8820*(1+rv/c))
@@ -744,12 +746,6 @@ def get_ew(object, wl, spec, dspec, rv, gaussianonly = 0):
     peakfindend = (np.abs(wl-8546.09*(1+rv/c))).argmin()
 
     sn = np.median(spec[fitstart:fitend]/dspec[fitstart:fitend])
-    
-
-    if sn < -7:
-        guassianonly = 1
-    else:
-        gaussianonly = 0
 
     contlevel = np.nanmedian(spec[contstart:contend][spec[contstart:contend]>0])
     if np.isnan(contlevel) :
@@ -819,8 +815,12 @@ def get_ew(object, wl, spec, dspec, rv, gaussianonly = 0):
 
     if gaussianonly:
         initial_guesses[4] = 0.
+        initial_guesses[8] = 0.
+        initial_guesses[9] = 0.
         initial_guesses[5] = 1.0
         param_control[4]['fixed'] = 1
+        param_control[8]['fixed'] = 1
+        param_control[9]['fixed'] = 1
         param_control[5]['fixed'] = 1
     fa = {'x':wl[fitstart:fitend], 'y': spec[fitstart:fitend], 'err':dspec[fitstart:fitend]}
 
@@ -866,14 +866,14 @@ def get_ew(object, wl, spec, dspec, rv, gaussianonly = 0):
         # Plot the result.
         fig, axarr = plt.subplots(1, 3, figsize=(17,6))
 
-        axarr[0].plot(wl[fitstart:fitend],spec[fitstart:fitend],c='lime')
+        axarr[0].plot(wl[fitstart:fitend],spec[fitstart:fitend],c='m')
         axarr[0].plot(wl[fitstart:fitend],spec[fitstart:fitend]-modelgl,c='y')
         axarr[0].plot(wl[fitstart:fitend],modelgl,lw=2,c='k')
         axarr[0].set_xlim(CaT1min*(1+rv/c),CaT1max*(1+rv/c))
         axarr[0].set_ylim(-0.5,1.5)
         axarr[0].xaxis.set_major_locator(plt.MultipleLocator(10))
 
-        axarr[1].plot(wl[fitstart:fitend],spec[fitstart:fitend],c='lime')
+        axarr[1].plot(wl[fitstart:fitend],spec[fitstart:fitend],c='m')
         axarr[1].plot(wl[fitstart:fitend],spec[fitstart:fitend]-modelgl,c='y')
 
         axarr[1].plot(wl[fitstart:fitend],modelgl,lw=2,c='k')
@@ -883,7 +883,7 @@ def get_ew(object, wl, spec, dspec, rv, gaussianonly = 0):
         axarr[1].set_title(str(object), fontsize=16)
         axarr[1].set_xlabel('Wavelength')
 
-        axarr[2].plot(wl[fitstart:fitend],spec[fitstart:fitend],c='lime')
+        axarr[2].plot(wl[fitstart:fitend],spec[fitstart:fitend],c='m')
         axarr[2].plot(wl[fitstart:fitend],spec[fitstart:fitend]-modelgl,c='y')
         axarr[2].plot(wl[fitstart:fitend],modelgl,lw=2,c='k')
         axarr[2].set_xlim(CaT3min*(1+rv/c),CaT3max*(1+rv/c))
@@ -957,9 +957,10 @@ def get_ew(object, wl, spec, dspec, rv, gaussianonly = 0):
     dews = np.sqrt(dew1_fit**2+dew2_fit**2+dew3_fit**2)
     vcat = v2
 
-    #ews = ew2_fit * (0.6+1.+0.9)
-    #dews = dew2_fit * (0.6+1.+0.9)
-    return -ew1_fit, dew1_fit, -ew2_fit, dew2_fit, -ew3_fit, dew3_fit, -ews, dews, vcat, niter
+    if gaussianonly:
+        return -ew1_fit*1.1, dew1_fit*1.1, -ew2_fit*1.1, dew2_fit*1.1, -ew3_fit*1.1, dew3_fit*1.1, -ews*1.1, dews*1.1, vcat, niter
+    else:
+        return -ew1_fit, dew1_fit, -ew2_fit, dew2_fit, -ew3_fit, dew3_fit, -ews, dews, vcat, niter
 
 def helio2gsr(vhelio, l, b):
     usol=11.1
@@ -1044,7 +1045,7 @@ if __name__ == "__main__":
                 
         print('ABAND_V = %8.3f +/- %5.3f' %(abandv, abandverr))
         print('ABAND_chi-square = %5.2f' %abandchi2)
-        ew1, dew1, ew2, dew2, ew3, dew3, ews, dews, vcat, niter = get_ew(object, wl, spec, dspec, rv, 0)
+        ew1, dew1, ew2, dew2, ew3, dew3, ews, dews, vcat, niter = get_ew(object, wl, spec, dspec, rv, gaussianonly)
         print('EW = %8.2f +/- %5.2f' %(ews, dews))
         print('V_CaT = %8.2f'%vcat)
 
@@ -1099,7 +1100,7 @@ if __name__ == "__main__":
                 else:
                     zq2 = -1
 
-                ew1, dew1, ew2, dew2, ew3, dew3, ews, dews, vcat, niter = get_ew(object, wl, spec, dspec, rv, 0)
+                ew1, dew1, ew2, dew2, ew3, dew3, ews, dews, vcat, niter = get_ew(object, wl, spec, dspec, rv, gaussianonly)
                 print('EW = %8.2f +/- %5.2f' %(ews, dews))
                 print('V_CaT = %8.2f'%vcat)
 
