@@ -1,0 +1,66 @@
+# Configuration for Spectral Analysis Program
+
+# MCMC settings
+nsam: 1200  # Number of MCMC steps for velocity and telluric fits
+nburn: 300
+
+# SNR settings
+snr_min: 2.5  # Minimum SNR threshold for spectra inclusion
+
+# Spectra Processing
+normalizeb4combine: 1  # Normalize spectra before combining (1) or after (0)
+uniform_resample: 0  # Resample spectra (0: no resampling, 1: uniform resampling)
+resample_step: 0.19  # Resampling step size (if uniform_resample is 1)
+cubic: 1  # Use cubic spline (1) or linear (0) interpolation
+nbuff: 5  # Number of pixels removed at spectrum edges
+
+# Output Settings
+save_settings:
+  savedata: 1  # Save output catalog
+  savervplot: 1  # Save RV template fit plots
+  saveewplot: 1  # Save CaT EW fit plots
+  writespec: 0  # Write combined and normalized spectra to txt file
+
+# Display Settings
+show_settings:
+  showcombinedspectra: 0  # Display combined spectra used for fitting
+  show_normalization: 0  # Show normalization process plots
+  showrvplot: 0  # Show RV template fit plots
+  showewplot: 0  # Show CaT EW fit plots
+  dispara: 0  # Display EW fit parameters in terminal (not saved)
+  zquality: 0  # Assess fitting quality manually (1: good fit, 0: bad fit)
+
+
+
+# Directory Paths
+objdir: './spec_1d/'  # Input 1D spectra directory
+outputdir: './'  # Output catalog and figure directory
+figdir: './Figures/'  # Directory for saved figures
+outputdir: './'  # Output catalog filename
+
+
+# Single Spectrum Analysis
+single_settings:
+  single: 0  # Run on specific single spectrum (1: yes, 0: no)
+  bhb: 0  # Use BHB template for single spectrum (1: yes, 0: no)
+  object_fname_single: 'test.fits'  # Path to single spectrum
+  gaussianonly: 0  # Fit EW with Gaussian only (1) or Gaussian + Lorentzian (0), or flexible based on S/N (2)
+
+# Wavelength Windows
+wavelength_settings:
+  CaT1min: 8480  # Spectra display window - CaT line 1 min wavelength
+  CaT1max: 8520  # Spectra display window - CaT line 1 max wavelength
+  CaT2min: 8520  # Spectra display window - CaT line 2 min wavelength
+  CaT2max: 8565  # Spectra display window - CaT line 2 max wavelength
+  CaT3min: 8640  # Spectra display window - CaT line 3 min wavelength
+  CaT3max: 8680  # Spectra display window - CaT line 3 max wavelength
+  wlmaskmin: 8450  # Spectra fitting window - min wavelength
+  wlmaskmax: 8685  # Spectra fitting window - max wavelength
+  wlmaskmin_bhb: 8450  # BHB spectra fitting window - min wavelength
+  wlmaskmax_bhb: 8900  # BHB spectra fitting window - max wavelength
+
+# Template Directories
+rv_fname: './stds/imacs-030817.fits'  # RV template path
+telluric_fname: './imacs-aband-063016.fits'  # Telluric template path
+
+
