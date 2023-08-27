@@ -11,123 +11,23 @@ from numpy.polynomial.legendre import legfit, legval
 import time
 from scipy.interpolate import CubicSpline
 from schwimmbad import MultiPool
-
 import warnings
 warnings.filterwarnings("ignore")
 
-#################################################
-######### SET PARAMETERS TILL LINE 100 ##########
-#################################################
+import yaml
 
-# number of mcmc steps. 1000 for official runs, 100 for test runs to save time.
-nsam=1000
+# Load the configuration from the YAML file
+with open('config.yaml', 'r') as config_file:
+    config = yaml.safe_load(config_file)
 
-# snr threshold, any spectra with snr below snr_min will be skipped for RV or EW fit.
-snr_min = 2
+# Access the list of mask names
+masknames = glob.glob(objdir)
+print("Mask names:", masknames)
 
-# normalize the spectra before combining the spectra (default: 1),  0 was used in the past (i.e. normalization done after combine)
-normalizeb4combine = 1
-
-# resample spec or not, default: uniform_resample = 0
-# in the past, uniform_resample = 1 was used
-uniform_resample = 0
-
-# resample step, if uniform_resample = 0, then this number is not used in the program since no resampling will be done.
-# used 0.1 A in the past, should use 0.19 A in the future since that is the actual grid if uniform_resample = 1.
-# if using step other than 0.19, then the error spectra will be wrong. TODO, rescale the error spectra for a different step size.
-resample_step = 0.19
-
-# if doing cubicspline interpolation, then cubic = 1. If linear then cubic = 0
-cubic = 1
-
-#save output catalog or not
-savedata = 1
-
-#show the combine spectra that is used for the fit
-showcombinedspectra = 0
-
-#show plots for how normalization is done
-show_normalization = 0
-
-#show the spectra with the best fit RV templates around CaT lines
-showrvplot = 0
-#save the plot above
-savervplot = 1
-
-#show the spectra with the best fit CaT EW
-showewplot = 0
-#save the plot above
-saveewplot = 1
-
-#display the parameters from the EW fit in the terminal (but not saved)
-dispara = 0
-
-#do you want to assess the fitting quality manually? if yes, then zquality = 1 and it will ask you to enter 1 or 0 during the run, usually 1 = good fit, 0 = bad fit
-zquality = 0
-
-#write the combined and normalized spectra to a txt file (including all wavelength, not just the spectral fitting window)
-#saved txt file will be in the same folder as the input fits file, i.e. objdir (see below)
-writespec = 0
-
-#directory for output catalog and figure
-outputdir = './'
-
-#directory for saved figures
-figdir = outputdir+'fig_delve2r1_oct9_2021_spec1d/'
-
-#file name for the output catalog
-outputfile = outputdir+'delve2r1_oct9_2021_spec1d.txt'
-
-#input directory for the 1D spectra. it should be a directory and the code will run on all spectra (filename ended with .fits) in this directory
-objdir = '../spec_1d/delve2r1_oct9_2021_spec1d/'
-
-#path for the rv template and telluric template
-rv_fname = '/Users/tingli/Dropbox/dwarfgalaxy/Magellan/stds/imacs-030817.fits'
-telluric_fname = '/Users/tingli/Dropbox/dwarfgalaxy/Magellan/stds/imacs-aband-063016.fits'
-
-# number of pixels to be removed at the edge since the spectra near the edge are sometimes bad (default = 5)
-# you may want to decrease this number if a line of interest (e.g. CaT) is near chip gap
-# nbuff cannot be zero due to how the code is written, 1 is the minimal.
-nbuff = 5
-
-###########################
-######  SINGLE MODE #######
-#running with one specific spectrum or not, if single = 1, then the file with object_fname_single will run, not the objdir files
-#if single = 1 and bhb = 1, then only BHB template will be fit, not the other two templates
-#bhb=1 only work when single=1 (i.e. bhb=1 won't work during batch mode above)
-single = 0
-bhb = 0
-object_fname_single = \
-'/Users/tingli/Dropbox/dwarfgalaxy/Magellan/Car23_IMACS/1Dspec_new/car2r1_spec1d_n4only/spec1d.car2r1xx.2017239293.fits'
-# fit the EW with gaussian + Lorentzian for 0, and only fit with gaussian for 1. (EW' = EW*1.1 if gaussian only)
-gaussianonly = 0
-##########################
-##########################
-
-##############################################
-######## END OF PARAMETER SETTING HERE #######
-##############################################
-
-# spectra display window (just for plotting)
-CaT1min=8480
-CaT1max=8520
-
-CaT2min=8520
-CaT2max=8565
-
-CaT3min=8640
-CaT3max=8680
-
-# spectra fitting window
-wlmaskmin = 8450
-wlmaskmax = 8685 # was using 8700 in the past but now switch to match with Josh's
-
-# BHB spectra fitting window
-wlmaskmin_bhb = 8450
-wlmaskmax_bhb = 8900
 
 #speed of light
-c = 2.99792458e5
+global c
+c= 2.99792458e5
 
 #create the path for storing the figures if not exist
 if not os.path.exists(figdir):
@@ -156,11 +56,6 @@ def normalize_spec(wl, spec, dspec):
     cont = np.median(spec)
     idx1 = (spec/cont > thlow) & (spec/cont < thhigh)
 
-
-    #if wl.min() < 7530:
-    #    lowbound = 7530
-    #else:
-    #    lowbound = 7580
     lowbound = 7580
 
     if snr > 7:
@@ -190,38 +85,7 @@ def normalize_spec(wl, spec, dspec):
     dspec = dspec/cont
 
     return spec,dspec
-'''
 
-def normalize_spec(wl, spec, dspec):
-    idx = (np.isnan(spec))
-    spec[idx] = 0
-    dspec[idx] = 1e15
-    idx = np.isnan(dspec)
-    dspec[idx] = 1e15
-    idx = spec < 0
-    dspec[idx] = 1e15
-    idx = dspec < 0
-    dspec[idx] = 1e15
-
-    scale = np.median(spec)
-    spec = spec / scale
-    dspec = dspec / scale
-
-    idx = spec > 0.9
-
-    if np.median(spec / dspec) > 7:
-        z = np.polyfit(wl[idx], spec[idx], 2, w=1. / dspec[idx])
-    else:
-        z = np.polyfit(wl[idx], spec[idx], 0)
-    p = np.poly1d(z)
-    spec = spec / p(wl)
-    dspec = dspec / p(wl)
-
-    # plt.plot(pixels, p(pixels)/max(p(pixels)))
-    # plt.show()
-
-    return spec, dspec
-'''
 
 def lp_post(rv, rvmin, rvmax, mask, wl, model, obj, objerr):
     lp = -np.inf
@@ -416,9 +280,7 @@ def read_rv_stds(filename, stdnum):
     rvwl = 10**(coeff0 + coeff1 * np.arange(len(temp)))
     rvspec = temp.astype('float')
     return rvwl, rvspec
-    #new_rvwl = np.arange(7500,9000.1,0.1)
-    #new_rvspec = np.interp(new_rvwl, rvwl, rvspec)
-    #return new_rvwl, new_rvspec
+
 
 def read_tell_stds(filename):
     temp = pyfits.open(filename)[0].data
@@ -428,9 +290,7 @@ def read_tell_stds(filename):
     rvwl = 10**(coeff0 + coeff1 * np.arange(len(temp)))
     rvspec = temp.astype('float')
     return rvwl, rvspec
-    #new_rvwl = np.arange(7500,9000.1,0.1)
-    #new_rvspec = np.interp(new_rvwl, rvwl, rvspec)
-    #return new_rvwl, new_rvspec
+
 
 def get_rv(wl, spec, dspec, rvwl, rvspec, object, rvstar):
     
