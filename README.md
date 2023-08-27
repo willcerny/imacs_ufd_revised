@@ -1,6 +1,7 @@
 # imacs_ufd_revised
 A revision to Ting Li's code for fitting IMACS spectra to get radial velocities and metallicities from the Calcium Triplet.
-The revision focuses on:
+The revision focuses on building a version that can batch run lots of different masks worth of data, and thus shouldn't necessarily be used for all purposes.
+
  (1) controlling input parameters via a config.yaml file,
  
  (2) running two different equivalent width measurements codes,
