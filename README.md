@@ -13,7 +13,7 @@ To do so, and to improve upon other areas, there are four main sets of new capab
  (4) improved documentation / general cleaning
 
 
- A wish list feature is to implement fitting the Mg I $\lambda$ 8807 line and the Na I $\lambda$ $\lambda$ 8183,8194 doublet.
+ A wish list feature is to implement fitting the Mg I $\lambda$ 8807 line and the Na I $\lambda\lambda$ 8183,8194 doublet.
 
 
  
