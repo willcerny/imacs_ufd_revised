@@ -13,26 +13,62 @@ from scipy.interpolate import CubicSpline
 from schwimmbad import MultiPool
 import warnings
 warnings.filterwarnings("ignore")
-
+import glob 
 import yaml
+import shutil
+
+global c; c= 2.99792458e5 #speed of light
+
+
+print('*'*100 + '\n' + '*'*100) # spacing for the terminal aesthetic
 
 # Load the configuration from the YAML file
 with open('config.yaml', 'r') as config_file:
     config = yaml.safe_load(config_file)
 
+# Set up directories 
+outputdir = config['outputdir'] 
+if not os.path.exists(outputdir + '/version_1'): 
+    os.makedirs(outputdir + '/version_1') 
+    print('Creating new output directory at %s'%outputdir)
+    outputdir = outputdir + '/version_1'
+else: 
+    if config['overwrite']:
+        shutil.rmtree(outputdir)
+        outputdir += '/version_1'
+        os.makedirs(outputdir) 
+        print('Overwriting existing data at %s'%outputdir)
+    else:  
+        print('here')
+        version = 2
+        while True:
+            new_directory = os.path.join(outputdir, f'version_%d'%version)
+            if not os.path.exists(new_directory):
+                os.makedirs(new_directory)
+                print('New version directory created: %s'%new_directory)
+                break
+            version += 1
+
+        outputdir = new_directory
+
+
 # Access the list of mask names
-masknames = glob.glob(objdir)
+masknames = glob.glob(config['objdir'] + '/*/')
 print("Mask names:", masknames)
 
-
-#speed of light
-global c
-c= 2.99792458e5
-
-#create the path for storing the figures if not exist
+# create a new set of subdirectories for figures:
+figdir = outputdir + '/Figures/'
 if not os.path.exists(figdir):
     os.makedirs(figdir)
 
+    
+## set some hyperparameters used across functions
+wavepar = config['wavelength_parameters']
+CaT1min, CaT1max =  wavepar['CaT1min'], wavepar['CaT1max']
+CaT2min, CaT2max =  wavepar['CaT2min'], wavepar['CaT2max']
+CaT3min, CaT3max =  wavepar['CaT3min'], wavepar['CaT3max']
+wlmaskmin, wlmaskmax = wavepar['wlmaskmin'], wavepar['wlmaskmax']
+wlmaskmin_bhb, wlmaskmax_bhb = wavepar['wlmaskmin_bhb'], wavepar['wlmaskmax_bhb']
     
 def normalize_spec(wl, spec, dspec):
     """
@@ -73,7 +109,7 @@ def normalize_spec(wl, spec, dspec):
         z = legfit(wl[idx1], spec[idx1], 0, w = 1./dspec[idx1])
         cont = legval(wl,z)
 
-    if show_normalization:
+    if config['show_settings']['show_normalization']:
         plt.show()
         plt.figure()
         plt.plot(wl, spec)
@@ -95,7 +131,7 @@ def lp_post(rv, rvmin, rvmax, mask, wl, model, obj, objerr):
         lp_prior=0.0
 
         new_wl = wl*(1+z)
-        if cubic:
+        if config['cubic']:
             p = CubicSpline(new_wl,model)
             model = p(wl)
         else:
@@ -116,7 +152,7 @@ def chi2cal(theta, mask, wl, model, obj, objerr):
     z = rv/c
 
     new_wl = wl*(1+z)
-    if cubic:
+    if config['cubic']:
         p = CubicSpline(new_wl,model)
         model = p(wl)
     else:
@@ -162,11 +198,14 @@ def combine_imacs_spec_resample_uniform(filename, nbuff=3):
     speccombine = np.sum(spec * spec_wgt, axis=1) / np.sum(spec_wgt, axis=1)
     dspeccombine = np.sqrt(1. / np.sum(spec_wgt, axis=1))
 
-    if writespec:
-        np.savetxt(filename+'.txt', np.column_stack((wl,speccombine)))
-        print('save to', filename+'.txt')
+    if config['save_settings']['writespec']:
+        if not os.path.exists(filename.replace('spec1d.', '/final_spectra/spec1d.').split('spec1d.')[0]):
+            os.makedirs(filename.replace('spec1d.', '/final_spectra/spec1d.').split('spec1d.')[0])
+        savename = filename.replace('spec1d.', 'final_spectra/spec1d.') +'.txt'
+        np.savetxt(savename , np.column_stack((wl,speccombine)))
+        print('Saving to', savename)
 
-    if showcombinedspectra:
+    if config['show_settings']['showcombinedspectra']:
         plt.plot(wl, speccombine/np.median(speccombine),'k')
         plt.plot(wl, dspeccombine/np.median(speccombine),'b')
         plt.ylim(-1,2)
@@ -200,7 +239,7 @@ def combine_imacs_spec_resample(filename, nbuff=3):
         wltemp = temp['LAMBDA'].flatten()[::-1][nbuff:-nbuff]
         spectemp = temp['SPEC'].flatten()[::-1][nbuff:-nbuff]
         dspectemp = np.sqrt(1. / (abs(temp['IVAR']).flatten()))[::-1][nbuff:-nbuff]
-        if normalizeb4combine:
+        if config['normalizeb4combine']:
             spectemp, dspectemp = normalize_spec(wltemp, spectemp, dspectemp)
         spec[:, k] = np.interp(wl, wltemp, spectemp, left=0., right=0.)
         dspec[:, k] = np.interp(wl, wltemp, dspectemp, left=1.e99, right=1.e99)
@@ -222,9 +261,9 @@ def combine_imacs_spec(filename, nbuff=3):
     wl = temp['LAMBDA'].flatten()[::-1][nbuff:-nbuff]
     spec = temp['SPEC'].flatten()[::-1][nbuff:-nbuff]
     dspec = np.sqrt(1. / (abs(temp['IVAR']).flatten()))[::-1][nbuff:-nbuff]
-    if normalizeb4combine:
+    if config['normalizeb4combine']:
         spec, dspec = normalize_spec(wl, spec, dspec)
-    if showcombinedspectra:
+    if config['show_settings']['showcombinedspectra']:
         plt.plot(wl, spec)
     
     overlap = 0
@@ -235,9 +274,9 @@ def combine_imacs_spec(filename, nbuff=3):
         wltemp = temp['LAMBDA'].flatten()[::-1][nbuff:-nbuff]
         spectemp = temp['SPEC'].flatten()[::-1][nbuff:-nbuff]
         dspectemp = np.sqrt(1. / (abs(temp['IVAR']).flatten()))[::-1][nbuff:-nbuff]
-        if normalizeb4combine:
+        if config['normalizeb4combine']:
             spectemp, dspectemp = normalize_spec(wltemp, spectemp, dspectemp)
-        if showcombinedspectra:
+        if config['show_settings']['showcombinedspectra']:
             plt.plot(wltemp, spectemp)
         if wltemp[0]-wl[-1] > 0.19:
             wl_gap = np.arange(wl[-1]+0.19, wltemp[0], 0.19)
@@ -258,11 +297,14 @@ def combine_imacs_spec(filename, nbuff=3):
     else:
         speccombine = spec
         dspeccombine = dspec
-    if writespec:
-        np.savetxt(filename+'.txt', np.column_stack((wl,speccombine)))
-        print('save to', filename+'.txt')
+    if config['save_settings']['writespec']:
+        if not os.path.exists(filename.replace('spec1d.', '/final_spectra/spec1d.').split('spec1d.')[0]):
+            os.makedirs(filename.replace('spec1d.', '/final_spectra/spec1d.').split('spec1d.')[0])
+        savename = filename.replace('spec1d.', 'final_spectra/spec1d.') +'.txt'
+        np.savetxt(savename , np.column_stack((wl,speccombine)))
+        print('Saving to', savename)
 
-    if showcombinedspectra:
+    if config['show_settings']['showcombinedspectra']:
         plt.plot(wl, speccombine/np.median(speccombine),'k')
         plt.plot(wl, dspeccombine/np.median(speccombine),'b')
         plt.ylim(-1,2)
@@ -294,7 +336,7 @@ def read_tell_stds(filename):
 
 def get_rv(wl, spec, dspec, rvwl, rvspec, object, rvstar):
     
-    if single and bhb:
+    if config['single_settings']['single'] and bhb:
         fitstart = (np.abs(wl-8400)).argmin()
         fitend = (np.abs(wl-9000)).argmin()
     else:
@@ -308,7 +350,9 @@ def get_rv(wl, spec, dspec, rvwl, rvspec, object, rvstar):
     spec,dspec = normalize_spec(wl, spec, dspec)
 
     ndim=1
-    nwalkers=20
+    nsam = config['nsam']
+    nwalkers= config['nwalkers']
+    nburn= config['nburn']
     rvmin = -800
     rvmax = 800
     
@@ -317,13 +361,9 @@ def get_rv(wl, spec, dspec, rvwl, rvspec, object, rvstar):
     chi2rv = np.zeros(nstars)
 
     rvspec_temp = np.zeros([nstars, len(wl)])
-
-    # MCMC needs some time to produce reasonable "d" from the likelihood, which is called the "burn-in" period.
-    # Adjusting the "burn-in" period is quite empirical.
-    nburn=50
     
     for kk in range(0, nstars, 1):
-        if cubic:
+        if config['cubic']:
             p = CubicSpline(rvwl[kk], rvspec[kk])
             tempspec = p(wl)
         else:
@@ -332,7 +372,7 @@ def get_rv(wl, spec, dspec, rvwl, rvspec, object, rvstar):
 
     rvspec = rvspec_temp
 
-    if single and bhb:
+    if config['single_settings']['single'] and config['single_settings']['bhb']:
         wlmask = (wl > wlmaskmin_bhb)  & (wl < wlmaskmax_bhb)
     else:
         wlmask = (wl > wlmaskmin)  & (wl < wlmaskmax)
@@ -377,7 +417,7 @@ def get_rv(wl, spec, dspec, rvwl, rvspec, object, rvstar):
     print('best fit', rv_mean, rv_std, chi2rv[jj], rvstar[jj])
     
     # Plot the result.
-    if single and bhb:
+    if config['single_settings']['single'] and config['single_settings']['bhb']:
         fig, axarr = plt.subplots(1, 2, figsize=(15,6))
         axarr[0].hist(temp, 100, color="k", histtype="step", range = [rv_mean - 5*rv_std, rv_mean + 5*rv_std])
         axarr[0].set_title('RV Histogram', fontsize=16)
@@ -429,9 +469,9 @@ def get_rv(wl, spec, dspec, rvwl, rvspec, object, rvstar):
         axarr[3].xaxis.set_major_locator(plt.MultipleLocator(10))
         axarr[3].set_title('snr ='+str(snr))
 
-    if savervplot:
+    if config['save_settings']['savervplot']:
         plt.savefig(figdir+str(object)+'_rv.png')
-    if showrvplot:
+    if  config['show_settings']['showrvplot']:
         plt.show()
 
     return rv_mean, rv_std, chi2rv[jj], snr, rvstar[jj]
@@ -439,7 +479,8 @@ def get_rv(wl, spec, dspec, rvwl, rvspec, object, rvstar):
 
 def get_telluric_corr(wl, spec, dspec, rvwl, rvspec, object, rv):
     ndim=1
-    nwalkers=20
+    nwalkers= config['nwalkers']
+    nburn= config['nburn']
     rvmin = -10
     rvmax = 10
     p0=np.random.rand(ndim * nwalkers).reshape((nwalkers, ndim))
@@ -453,10 +494,7 @@ def get_telluric_corr(wl, spec, dspec, rvwl, rvspec, object, rv):
     spec = spec[(wl > 7530)  & (wl < 7720)]
     dspec = dspec[(wl > 7530)  & (wl < 7720)]
     wl = wl[(wl > 7530)  & (wl < 7720)]
-
-    # MCMC needs some time to produce reasonable "d" from the likelihood, which is called the "burn-in" period.
-    # Adjusting the "burn-in" period is quite empirical.
-    nburn=50
+    
 
     if cubic:
         p = CubicSpline(rvwl, rvspec)
@@ -501,8 +539,6 @@ def get_telluric_corr(wl, spec, dspec, rvwl, rvspec, object, rv):
         axarr[0].xaxis.set_major_locator(plt.MultipleLocator(rv_std*3))
         axarr[0].set_xlabel('RV')
         axarr[0].set_xlim(rv_mean - 5*rv_std, rv_mean + 5*rv_std)
-        #axarr[0].axvline(np.percentile(temp, 16), ls='--', color='r')
-        #axarr[0].axvline(np.percentile(temp, 84), ls='--', color='r')
         axarr[0].axvline(np.percentile(temp, 50), ls='--', color='b')
 
         axarr[1].plot(wl[wlmask], spec[wlmask], 'm',lw=0.5)
@@ -532,9 +568,9 @@ def get_telluric_corr(wl, spec, dspec, rvwl, rvspec, object, rv):
 
 
 
-        if savervplot:
+        if config['save_settings']['savervplot']:
             plt.savefig(figdir+str(object)+'_tell.png')
-        if showrvplot:
+        if config['show_settings']['showrvplot']:
             plt.show()
 
     return rv_mean, rv_std, chi2rv, snr
@@ -562,19 +598,6 @@ def Flin(x,p):
 
     return p[0] * (1 + gauss + lorentz)
     
-'''
-# if the relative ratio between three lines are fixed, then use this Flin(x,p)
-def Flin(x,p):
-
-    gauss = p[1]*np.exp(-0.5*((x-p[2])/p[3])**2)+ \
-            0.6 * p[1]*np.exp(-0.5*( (x-p[2]*0.994841)/p[3] )**2) + \
-            0.9 * p[1]*np.exp(-0.5*( (x-p[2]*1.01405)/p[3] )**2)
-    lorentz = p[4]*p[5]/( (x-p[2])**2 + (p[5]/2.)**2 ) + \
-              0.6 * p[4]*p[5]/( (x-p[2]*0.994841)**2 + (p[5]/2.)**2 ) + \
-              0.9 * p[4]*p[5]/( (x-p[2]*1.01405)**2 + (p[5]/2.)**2 )
-
-    return p[0] + gauss + lorentz
-'''
 
 def myfunctlin(p, fjac=None, x=None, y=None, err=None):
     model = Flin(x, p)
@@ -582,7 +605,7 @@ def myfunctlin(p, fjac=None, x=None, y=None, err=None):
     #return [status, (y-model)**2/(2*err**2)]
     return [status, ((y-model)/err)]
 
-def get_ew(object, wl, spec, dspec, rv, gaussianonly = 0):
+def get_ew_IMACS(object, wl, spec, dspec, rv, gaussianonly, snr):
     
     fitstart = (np.abs(wl-8400)).argmin()
     fitend = (np.abs(wl-8700)).argmin()
@@ -673,7 +696,8 @@ def get_ew(object, wl, spec, dspec, rv, gaussianonly = 0):
     param_control[5]['limited'][1] = 1
     param_control[5]['limits'][1] = 3.63
 
-    if gaussianonly:
+    if (config['gaussianonly'] == 1) or ((config['gaussianonly'] == 2) and snr < 10):
+        ## these lines force the lorentzian component to be fixed at 0
         initial_guesses[4] = 0.
         initial_guesses[8] = 0.
         initial_guesses[9] = 0.
@@ -817,26 +841,19 @@ def get_ew(object, wl, spec, dspec, rv, gaussianonly = 0):
     dews = np.sqrt(dew1_fit**2+dew2_fit**2+dew3_fit**2)
     vcat = v2
 
-    if gaussianonly:
+    if (config['gaussianonly'] == 1) or ((config['gaussianonly'] == 2) and snr < 10):
         return -ew1_fit*1.1, dew1_fit*1.1, -ew2_fit*1.1, dew2_fit*1.1, -ew3_fit*1.1, dew3_fit*1.1, -ews*1.1, dews*1.1, vcat, niter
     else:
         return -ew1_fit, dew1_fit, -ew2_fit, dew2_fit, -ew3_fit, dew3_fit, -ews, dews, vcat, niter
 
-def helio2gsr(vhelio, l, b):
-    usol=11.1
-    vsol=12.24
-    wsol=7.25
-    theta=220.0
-    vcirc=vsol+theta
-    vgsr = vhelio+usol*np.cos(b*np.pi/180.)*np.cos(l*np.pi/180.)+vcirc*np.cos(b*np.pi/180.)*np.sin(l*np.pi/180.)+wsol*np.sin(b*np.pi/180)
-    return vgsr
-
 
 if __name__ == "__main__":
 
-    rvwl1, rvspec1 = read_rv_stds(rv_fname, 0)
-    rvwl2, rvspec2 = read_rv_stds(rv_fname, 1)
-    rvwl3, rvspec3 = read_rv_stds(rv_fname, 8)
+    
+    ### THIS PART IS MASK-INDEPENDENT AND SHOULD ONLY BE RUN ONCE
+    rvwl1, rvspec1 = read_rv_stds(config['rv_fname'], 0)
+    rvwl2, rvspec2 = read_rv_stds(config['rv_fname'], 1)
+    rvwl3, rvspec3 = read_rv_stds(config['rv_fname'], 8)
 
     if not (all(rvwl1 == rvwl2) and all(rvwl2 == rvwl3)):
         print("SOMETHING WRONG WITH STELLAR TEMPLATES")
@@ -845,7 +862,7 @@ if __name__ == "__main__":
     rvspec2[rvspec2 == 0] = 1
     rvspec3[rvspec3 == 0] = 1
 
-    if bhb and single:
+    if config['single_settings']['bhb'] and config['single_settings']['single']:
         rvstar = np.array(['HD161817'])
     else:
         rvstar = np.array(['HD122563', 'HD26297', 'HD161817'])
@@ -856,7 +873,7 @@ if __name__ == "__main__":
     rvwl = np.zeros([nstars, num])
     rvspec = np.zeros([nstars, num])
 
-    if bhb and single:
+    if config['single_settings']['bhb'] and config['single_settings']['single']:
         rvwl[0] = rvwl3
         rvspec[0] = rvspec3
     
@@ -870,25 +887,32 @@ if __name__ == "__main__":
         rvwl[2] = rvwl3
         rvspec[2] = rvspec3
     
-    telluwl, telluspec = read_tell_stds(telluric_fname)
-
-    objlist = os.listdir(objdir)
-    objlist = np.sort(objlist)
-    k = 0
+    telluwl, telluspec = read_tell_stds(config['telluric_fname'])
     
-    if savedata:
+    
+    ## THIS PART IS MASK-DEPENDENT 
+    for maskname in masknames: 
+        shortmaskname = maskname.split('%s'%config['objdir'])[1].replace('/','')
+        print('*'*70 + '\n' + 'Now starting mask:', shortmaskname + '\n' + '*' * 25)
+        outputfile = os.path.join(outputdir,'%s.txt'%shortmaskname)
+    #print(outputdir + maskname)
+    objlist = glob.glob(maskname + '*.fits')
+    objlist = np.sort(objlist)
+    #k = 0
+    
+    if config['save_settings']['savedata']:
         f = open(outputfile,'a')
         f.write('#INDEX OBJECT    SNR    V    dV   template  chi2rv  zq1  abandSNR   aband  daband   chi2aband  zq2   EW1   dEW1   EW2  dEW2  EW3  dEW3    EW     dEW  VCaT  zq3  niter\n')
         f.close()
-    if single:
+    if config['single_settings']['single']:
         object_fname = object_fname_single
         
-        if uniform_resample:
-            wl, spec, dspec = combine_imacs_spec_resample_uniform(object_fname, nbuff=nbuff)
+        if config['uniform_resample']:
+            wl, spec, dspec = combine_imacs_spec_resample_uniform(object_fname, nbuff = config['nbuff'])
         else:
-            wl, spec, dspec = combine_imacs_spec(object_fname, nbuff = nbuff)
+            wl, spec, dspec = combine_imacs_spec(object_fname, nbuff = config['nbuff'])
         
-        if not normalizeb4combine:
+        if not config['normalizeb4combine']:
             spec, dspec = normalize_spec(wl, spec, dspec)
         
         hdr = pyfits.open(object_fname)[5].header
@@ -905,7 +929,7 @@ if __name__ == "__main__":
                 
         print('ABAND_V = %8.3f +/- %5.3f' %(abandv, abandverr))
         print('ABAND_chi-square = %5.2f' %abandchi2)
-        ew1, dew1, ew2, dew2, ew3, dew3, ews, dews, vcat, niter = get_ew(object, wl, spec, dspec, rv, gaussianonly)
+        ew1, dew1, ew2, dew2, ew3, dew3, ews, dews, vcat, niter = get_ew_IMACS(object, wl, spec, dspec, rv, config['gaussianonly'], snr)
         print('EW = %8.2f +/- %5.2f' %(ews, dews))
         print('V_CaT = %8.2f'%vcat)
 
@@ -913,19 +937,18 @@ if __name__ == "__main__":
     else:
         for ii in range(0, len(objlist)):
             if objlist[ii][-5:] == '.fits':
-                fname = objlist[ii]
-                object_fname = objdir + fname
+                object_fname = objlist[ii]
                 snr = get_snr(object_fname)
 
-                if snr < snr_min:
+                if snr < config['snr_min']:
                     continue
 
-                if uniform_resample:
-                    wl, spec, dspec = combine_imacs_spec_resample_uniform(object_fname, nbuff=nbuff)
+                if config['uniform_resample']:
+                    wl, spec, dspec = combine_imacs_spec_resample_uniform(object_fname, nbuff = config['nbuff'])
                 else:
-                    wl, spec, dspec = combine_imacs_spec(object_fname, nbuff = nbuff)
+                    wl, spec, dspec = combine_imacs_spec(object_fname, nbuff = config['nbuff'])
 
-                if not normalizeb4combine:
+                if not config['normalizeb4combine']:
                     spec, dspec = normalize_spec(wl, spec, dspec)
 
                 hdr = pyfits.open(object_fname)[5].header
@@ -936,7 +959,7 @@ if __name__ == "__main__":
                 print('RV = %8.3f +/- %5.3f' %(rv, rverr))
                 print('chi-square = %5.2f' %chi2)
 
-                if zquality:
+                if config['show_settings']['zquality']:
                     while True:
                         temp = input('quality (0 or 1) --> ')
                         if temp == '0' or temp == '1':
@@ -960,11 +983,11 @@ if __name__ == "__main__":
                 else:
                     zq2 = -1
 
-                ew1, dew1, ew2, dew2, ew3, dew3, ews, dews, vcat, niter = get_ew(object, wl, spec, dspec, rv, gaussianonly)
+                ew1, dew1, ew2, dew2, ew3, dew3, ews, dews, vcat, niter = get_ew_IMACS(object, wl, spec, dspec, rv, config['gaussianonly'], snr)
                 print('EW = %8.2f +/- %5.2f' %(ews, dews))
                 print('V_CaT = %8.2f'%vcat)
 
-                if zquality:
+                if config['show_settings']['zquality']:
                     while True:
                         temp = input('quality (0 or 1) --> ')
                         if temp == '0' or temp == '1':
@@ -974,7 +997,7 @@ if __name__ == "__main__":
                     zq3 = -1
 
 
-                if savedata:
+                if config['save_settings']['savedata']:
                     f = open(outputfile, 'a')
                     f.write('%2d %22s %7.2f %7.2f %5.2f %10s %5.2f %3i %7.2f %7.2f %5.2f %5.2f %3i %5.2f %5.2f %5.2f %5.2f %5.2f %5.2f %5.2f %5.2f %7.2f %3i %3i \n'\
                             %(ii, object, snr, rv, rverr, template, chi2, zq1, abandsnr, abandv, abandverr, abandchi2, zq2,  ew1, dew1, ew2, dew2, ew3, dew3, ews, dews, vcat, zq3, niter))
